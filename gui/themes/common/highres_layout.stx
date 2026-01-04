@@ -994,6 +994,22 @@
 		</layout>
 	</dialog>
 
+	<dialog name = 'GlobalOptions_Hardware' overlays = 'Dialog.GlobalOptions.TabWidget'>
+		<layout type = 'vertical' padding = '16, 16, 16, 16' spacing = '8'>
+			<widget name = 'seEnableCheckbox'
+					type = 'Checkbox'
+			/>
+			<layout type = 'horizontal' padding = '0, 0, 0, 0' spacing = '10' align = 'center'>
+				<widget name = 'sePortDesc'
+						type = 'OptionsLabel'
+				/>
+				<widget name = 'sePort'
+						type = 'EditText'
+				/>
+			</layout>
+		</layout>
+	</dialog>
+
 	<dialog name = 'GlobalOptions_Paths' overlays = 'Dialog.GlobalOptions.TabWidget'>
 		<layout type = 'vertical' padding = '0, 0, 0, 0'>
 			<widget name = 'Container'

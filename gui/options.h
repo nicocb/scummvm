@@ -98,6 +98,7 @@ protected:
 	void addAudioControls(GuiObject *boss, const Common::String &prefix);
 	void addMIDIControls(GuiObject *boss, const Common::String &prefix);
 	void addMT32Controls(GuiObject *boss, const Common::String &prefix);
+	void addSpeakerEasyControls(GuiObject *boss, const Common::String &prefix);
 	void addVolumeControls(GuiObject *boss, const Common::String &prefix);
 	// The default value is the launcher's non-scaled talkspeed value. When SCUMM uses the widget,
 	// it uses its own scale
@@ -202,6 +203,13 @@ private:
 	bool _enableMT32Settings;
 	CheckboxWidget *_mt32Checkbox;
 	CheckboxWidget *_enableGSCheckbox;
+
+	//
+	// SpeakerEasy controls (external PC Speaker hardware)
+	//
+	CheckboxWidget *_speakerEasyCheckbox;
+	StaticTextWidget *_speakerEasyPortDesc;
+	EditTextWidget *_speakerEasyPort;
 
 	//
 	// Subtitle controls

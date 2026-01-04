@@ -70,12 +70,15 @@ Player_V2::Player_V2(ScummEngine *scumm, Audio::Mixer *mixer, bool pcjr)
 
 	setMusicVolume(255);
 
+	_speakerEasy = Audio::SpeakerEasy::create();
+
 	_mixer->playStream(Audio::Mixer::kPlainSoundType, &_soundHandle, this, -1, Audio::Mixer::kMaxChannelVolume, 0, DisposeAfterUse::NO, true);
 }
 
 Player_V2::~Player_V2() {
 	Common::StackLock lock(_mutex);
 	_mixer->stopHandle(_soundHandle);
+	delete _speakerEasy;
 }
 
 void Player_V2::setMusicVolume (int vol) {
@@ -268,9 +271,25 @@ void Player_V2::generateSpkSamples(int16 *data, uint len) {
 	if (winning_channel != -1) {
 		squareGenerator(0, _channels[winning_channel].d.freq, 0,
 				0, data, len);
-	} else if (_level == 0)
-		/* shortcut: no sound is being played. */
-		return;
+
+		// Envoi au hardware externe
+		if (_speakerEasy && _speakerEasy->isConnected()) {
+			// Conversion de la fréquence interne vers Hz
+			int freqDiv = _channels[winning_channel].d.freq >> 6;
+			if (freqDiv > 0) {
+				uint16 freq = 1193000 / freqDiv;
+				_speakerEasy->sendNote(freq);
+			}
+		}
+	} else {
+		// Silence sur le hardware externe
+		if (_speakerEasy && _speakerEasy->isConnected()) {
+			_speakerEasy->sendNote(0);
+		}
+		if (_level == 0)
+			/* shortcut: no sound is being played. */
+			return;
+	}
 
 	lowPassFilter(data, len);
 }

@@ -24,6 +24,7 @@
 
 #include "audio/audiostream.h"
 #include "audio/mixer.h"
+#include "audio/softsynth/speakereasy.h"
 #include "common/mutex.h"
 #include "common/queue.h"
 
@@ -168,6 +169,8 @@ protected:
 	static int8 generateSaw(uint32 x, uint32 oscLength);
 	static int8 generateTriangle(uint32 x, uint32 oscLength);
 	static int8 generateSilence(uint32 x, uint32 oscLength);
+
+	SpeakerEasy *_speakerEasy;
 };
 
 } // End of namespace Audio

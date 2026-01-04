@@ -241,6 +241,9 @@ void OptionsDialog::init() {
 	_mt32DevicePopUp = nullptr;
 	_mt32DevicePopUpDesc = nullptr;
 	_enableGSCheckbox = nullptr;
+	_speakerEasyCheckbox = nullptr;
+	_speakerEasyPortDesc = nullptr;
+	_speakerEasyPort = nullptr;
 	_enableVolumeSettings = false;
 	_musicVolumeDesc = nullptr;
 	_musicVolumeSlider = nullptr;
@@ -1071,6 +1074,12 @@ void OptionsDialog::apply() {
 			ConfMan.removeKey("enable_gs", _domain);
 			_enableGSCheckbox->setOverride(false);
 		}
+	}
+
+	// SpeakerEasy options
+	if (_speakerEasyCheckbox) {
+		ConfMan.setBool("speakereasy_enable", _speakerEasyCheckbox->getState(), _domain);
+		ConfMan.set("speakereasy_port", _speakerEasyPort->getEditString(), _domain);
 	}
 
 	// Subtitle options
@@ -1904,6 +1913,19 @@ void OptionsDialog::addMT32Controls(GuiObject *boss, const Common::String &prefi
 	_enableMT32Settings = true;
 }
 
+void OptionsDialog::addSpeakerEasyControls(GuiObject *boss, const Common::String &prefix) {
+	// SpeakerEasy enable checkbox
+	_speakerEasyCheckbox = new CheckboxWidget(boss, prefix + "seEnableCheckbox", _("Enable SpeakerEasy"), _("Enable external PC Speaker hardware via serial port"));
+
+	// Serial port field
+	_speakerEasyPortDesc = new StaticTextWidget(boss, prefix + "sePortDesc", _("Serial port:"), _("Serial port for SpeakerEasy device (e.g., COM7, /dev/ttyUSB0)"));
+	_speakerEasyPort = new EditTextWidget(boss, prefix + "sePort", Common::U32String(), _("Serial port for SpeakerEasy device"));
+
+	// Load current values
+	_speakerEasyCheckbox->setState(ConfMan.getBool("speakereasy_enable", _domain));
+	_speakerEasyPort->setEditString(ConfMan.get("speakereasy_port", _domain));
+}
+
 // The function has an extra slider range parameter, since both the launcher and SCUMM engine
 // make use of the widgets. The launcher range is 0-255. SCUMM's 0-9
 void OptionsDialog::addSubtitleControls(GuiObject *boss, const Common::String &prefix, int maxSliderVal) {
@@ -2340,7 +2362,13 @@ void GlobalOptionsDialog::build() {
 	addMT32Controls(tab, "GlobalOptions_MT32.");
 
 	//
-	// 5) The Paths tab
+	// 5) The Hardware tab (SpeakerEasy)
+	//
+	tab->addTab(_("Hardware"), "GlobalOptions_Hardware");
+	addSpeakerEasyControls(tab, "GlobalOptions_Hardware.");
+
+	//
+	// 6) The Paths tab
 	//
 	if (!g_gui.useLowResGUI())
 		tab->addTab(_("Paths"), "GlobalOptions_Paths");

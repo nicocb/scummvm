@@ -46,10 +46,12 @@ PCSpeakerStream::PCSpeakerStream(int rate) {
 	_volume = 255;
 	_commandQueue = new Common::Queue<Command>();
 	_commandActive = false;
+	_speakerEasy = SpeakerEasy::create();
 }
 
 PCSpeakerStream::~PCSpeakerStream() {
 	delete _commandQueue;
+	delete _speakerEasy;
 }
 
 void PCSpeakerStream::play(PCSpeaker::WaveForm wave, int freq, int32 length) {
@@ -73,6 +75,11 @@ void PCSpeakerStream::play(PCSpeaker::WaveForm wave, int freq, int32 length) {
 		_playForever = false;
 	}
 	_mixedSamples = 0;
+
+	// Envoi au hardware externe
+	if (_speakerEasy && _speakerEasy->isConnected()) {
+		_speakerEasy->sendNote(freq);
+	}
 }
 
 void PCSpeakerStream::playQueue(PCSpeaker::WaveForm wave, float freq, uint32 lengthus) {
@@ -81,6 +88,11 @@ void PCSpeakerStream::playQueue(PCSpeaker::WaveForm wave, float freq, uint32 len
 	// Put the new instruction in the queue. This will be picked up by the
 	// readBuffer method.
 	_commandQueue->push(Command(wave, freq, lengthus));
+
+	// Envoi au hardware externe
+	if (_speakerEasy && _speakerEasy->isConnected()) {
+		_speakerEasy->sendNote((uint16)freq);
+	}
 }
 
 void PCSpeakerStream::stop(int32 delay) {
@@ -94,6 +106,11 @@ void PCSpeakerStream::stop(int32 delay) {
 		_remainingSamples = delaySamples;
 	}
 	_playForever = false;
+
+	// Silence sur le hardware externe
+	if (_speakerEasy && _speakerEasy->isConnected()) {
+		_speakerEasy->sendNote(0);
+	}
 }
 
 void PCSpeakerStream::setVolume(byte volume) {

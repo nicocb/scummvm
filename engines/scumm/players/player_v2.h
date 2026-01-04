@@ -25,6 +25,7 @@
 #include "scumm/players/player_v2base.h"
 #include "audio/audiostream.h"
 #include "audio/mixer.h"
+#include "audio/softsynth/speakereasy.h"
 
 namespace Scumm {
 
@@ -69,6 +70,7 @@ protected:
 	Audio::Mixer *_mixer;
 	Audio::SoundHandle _soundHandle;
 	const uint32 _sampleRate;
+	Audio::SpeakerEasy *_speakerEasy;
 
 	Common::Mutex _mutex;
 
