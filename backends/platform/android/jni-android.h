@@ -128,6 +128,14 @@ public:
 	static int exportBackup(const Common::U32String &prompt);
 	static int importBackup(const Common::U32String &prompt, const Common::String &path);
 
+	// SpeakerEasy Bluetooth SPP support
+	static bool requestBluetoothPermission();
+	static bool hasBluetoothPermission();
+	static bool bluetoothConnect(const Common::String &deviceName);
+	static void bluetoothDisconnect();
+	static bool bluetoothIsConnected();
+	static bool bluetoothSendNote(uint16 freq, uint16 dur);
+
 private:
 	static pthread_key_t _env_tls;
 
@@ -138,6 +146,7 @@ private:
 	static jobject _jobj_egl;
 	static jobject _jobj_egl_display;
 	static jobject _jobj_egl_surface;
+	static jobject _jobj_bluetooth_serial;
 	// cached EGL version
 	static int _egl_version;
 
@@ -181,6 +190,14 @@ private:
 	static jmethodID _MID_AudioTrack_play;
 	static jmethodID _MID_AudioTrack_stop;
 	static jmethodID _MID_AudioTrack_write;
+
+	static jmethodID _MID_BluetoothSerial_connect;
+	static jmethodID _MID_BluetoothSerial_close;
+	static jmethodID _MID_BluetoothSerial_isConnected;
+	static jmethodID _MID_BluetoothSerial_sendNote;
+
+	static jmethodID _MID_requestBluetoothPermission;
+	static jmethodID _MID_hasBluetoothPermission;
 
 	static const JNINativeMethod _natives[];
 

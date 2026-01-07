@@ -1,3 +1,14 @@
 ./configure --host=x86_64-w64-mingw32.static --enable-updates --disable-all-engines --enable-engine=scumm,scumm-7-8,he
 
 make win32dist-mingw DESTDIR=win32dist-mingw
+
+
+toolchains/android
+
+sed -i 's/\r$//' ./android_project/gradlew
+
+./configure  --host=android-arm64-v8a --enable-debug --enable-debug --disable-all-engines --enable-engine=scumm,scumm-7-8,he
+
+make androiddistdebug
+
+make clean;make androiddistdebug;

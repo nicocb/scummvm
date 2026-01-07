@@ -96,6 +96,7 @@ public class ScummVMActivity extends Activity implements OnKeyboardVisibilityLis
 	private static final int MY_PERMISSIONS_REQUEST_READ_EXT_STORAGE = 100;
 	private static final int MY_PERMISSIONS_REQUEST_WRITE_EXT_STORAGE = 101;
 	private static final int MY_PERMISSION_ALL = 110;
+	private static final int MY_PERMISSIONS_REQUEST_BLUETOOTH = 120;
 
 	private static final String[] MY_PERMISSIONS_STR_LIST = {
 		Manifest.permission.READ_EXTERNAL_STORAGE,
@@ -1314,7 +1315,42 @@ public class ScummVMActivity extends Activity implements OnKeyboardVisibilityLis
 				Toast.makeText(this, "Until permission is granted, it might be impossible to write to some locations!", Toast.LENGTH_SHORT)
 					.show();
 			}
+		} else if (requestCode == MY_PERMISSIONS_REQUEST_BLUETOOTH) {
+			if (grantResults.length > 0
+				&& grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+				Log.i(ScummVM.LOG_TAG, "Bluetooth Connect permission was granted at Runtime");
+			} else {
+				Log.i(ScummVM.LOG_TAG, "Bluetooth Connect permission was denied at Runtime");
+				Toast.makeText(this, "Bluetooth permission denied. SpeakerEasy will not work.", Toast.LENGTH_SHORT)
+					.show();
+			}
 		}
+	}
+
+	/**
+	 * Check and request Bluetooth Connect permission (required for Android 12+).
+	 * @return true if permission is already granted
+	 */
+	public boolean requestBluetoothPermission() {
+		if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+			if (checkSelfPermission(Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED) {
+				Log.d(ScummVM.LOG_TAG, "Requesting BLUETOOTH_CONNECT permission");
+				requestPermissions(new String[]{Manifest.permission.BLUETOOTH_CONNECT}, MY_PERMISSIONS_REQUEST_BLUETOOTH);
+				return false;
+			}
+		}
+		return true;
+	}
+
+	/**
+	 * Check if Bluetooth Connect permission is granted.
+	 * @return true if permission is granted (or not needed on older Android versions)
+	 */
+	public boolean hasBluetoothPermission() {
+		if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+			return checkSelfPermission(Manifest.permission.BLUETOOTH_CONNECT) == PackageManager.PERMISSION_GRANTED;
+		}
+		return true;
 	}
 
 

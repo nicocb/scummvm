@@ -9,27 +9,39 @@
 #undef FORBIDDEN_SYMBOL_EXCEPTION_printf
 #endif
 
-// Platform-specific serial port headers
+// Platform-specific headers (non-Android only - Android uses JNI in .cpp)
+#if !defined(__ANDROID__)
 #if defined(WIN32) || defined(_WIN32)
 #ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
 #endif
 #include <windows.h>
-#elif defined(__POSIX__) || defined(__linux__) || defined(__ANDROID__) || defined(__APPLE__)
+#elif defined(__POSIX__) || defined(__linux__) || defined(__APPLE__)
 #define SPEAKEREASY_POSIX
 #include <fcntl.h>
 #include <termios.h>
 #include <unistd.h>
 #include <errno.h>
 #endif
+#endif // !__ANDROID__
 
 namespace Audio {
 
 /**
- * SpeakerEasy Driver - External PC Speaker via Serial/USB
+ * SpeakerEasy Driver - External PC Speaker via Serial/Bluetooth
+ * Windows/Linux/macOS: Serial port (COM port or /dev/tty*)
+ * Android: Bluetooth SPP via JNI (implementation in speakereasy.cpp)
  */
 class SpeakerEasy {
 public:
+#if defined(__ANDROID__)
+    // Android implementation in speakereasy.cpp
+    SpeakerEasy(const char *portName);
+    ~SpeakerEasy();
+    bool isConnected() const;
+    void sendNote(uint16 freq, uint16 dur = 0);
+#else
+    // Desktop implementation inline
     SpeakerEasy(const char *portName) : _fd(-1), _connected(false) {
 #if defined(WIN32) || defined(_WIN32)
         _hSerial = INVALID_HANDLE_VALUE;
@@ -63,15 +75,15 @@ public:
                 cfsetospeed(&tty, B115200);
                 cfsetispeed(&tty, B115200);
 
-                tty.c_cflag = (tty.c_cflag & ~CSIZE) | CS8; // 8-bit chars
-                tty.c_cflag &= ~(PARENB | PARODD);          // No parity
-                tty.c_cflag &= ~CSTOPB;                      // 1 stop bit
-                tty.c_cflag &= ~CRTSCTS;                     // No hardware flow control
-                tty.c_cflag |= (CLOCAL | CREAD);             // Enable receiver, ignore modem controls
+                tty.c_cflag = (tty.c_cflag & ~CSIZE) | CS8;
+                tty.c_cflag &= ~(PARENB | PARODD);
+                tty.c_cflag &= ~CSTOPB;
+                tty.c_cflag &= ~CRTSCTS;
+                tty.c_cflag |= (CLOCAL | CREAD);
 
-                tty.c_lflag = 0;     // Raw mode
-                tty.c_oflag = 0;     // Raw output
-                tty.c_iflag &= ~(IXON | IXOFF | IXANY); // No software flow control
+                tty.c_lflag = 0;
+                tty.c_oflag = 0;
+                tty.c_iflag &= ~(IXON | IXOFF | IXANY);
 
                 if (tcsetattr(_fd, TCSANOW, &tty) == 0) {
                     _connected = true;
@@ -97,32 +109,9 @@ public:
 
     bool isConnected() const { return _connected; }
 
-    /**
-     * Factory method that creates a SpeakerEasy instance based on ConfMan settings.
-     * Returns nullptr if SpeakerEasy is disabled or port is not configured.
-     */
-    static SpeakerEasy *create() {
-        if (!ConfMan.getBool("speakereasy_enable"))
-            return nullptr;
-        Common::String port = ConfMan.get("speakereasy_port");
-        if (port.empty()) {
-            warning("SpeakerEasy: No serial port configured");
-            return nullptr;
-        }
-        SpeakerEasy *se = new SpeakerEasy(port.c_str());
-        if (!se->isConnected()) {
-            warning("SpeakerEasy: Failed to connect to %s", port.c_str());
-            delete se;
-            return nullptr;
-        }
-        debug(1, "SpeakerEasy: Connected to %s", port.c_str());
-        return se;
-    }
-
     void sendNote(uint16 freq, uint16 dur = 0) {
         if (!_connected) return;
 
-        // Protocole SpeakerEasy : CMD_STREAM_NOTE (0x06) + Freq(2) + Dur(2)
         uint8 packet[5];
         packet[0] = 0x06;
         packet[1] = (uint8)(freq & 0xFF);
@@ -139,12 +128,38 @@ public:
         write(_fd, packet, 5);
 #endif
     }
+#endif // !__ANDROID__
+
+    /**
+     * Factory method that creates a SpeakerEasy instance based on ConfMan settings.
+     * Returns nullptr if SpeakerEasy is disabled or port is not configured.
+     * On Android, 'port' is the Bluetooth device name (e.g., "Speaker Easy").
+     */
+    static SpeakerEasy *create() {
+        if (!ConfMan.getBool("speakereasy_enable"))
+            return nullptr;
+        Common::String port = ConfMan.get("speakereasy_port");
+        if (port.empty()) {
+            warning("SpeakerEasy: No port/device configured");
+            return nullptr;
+        }
+        SpeakerEasy *se = new SpeakerEasy(port.c_str());
+        if (!se->isConnected()) {
+            warning("SpeakerEasy: Failed to connect to %s", port.c_str());
+            delete se;
+            return nullptr;
+        }
+        debug(1, "SpeakerEasy: Connected to %s", port.c_str());
+        return se;
+    }
 
 private:
 #if defined(WIN32) || defined(_WIN32)
     HANDLE _hSerial;
 #endif
-    int _fd;  // File descriptor for POSIX
+#if !defined(__ANDROID__)
+    int _fd;
+#endif
     bool _connected;
 };
 

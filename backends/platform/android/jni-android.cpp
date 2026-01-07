@@ -64,6 +64,7 @@ jobject JNI::_jobj_audio_track = 0;
 jobject JNI::_jobj_egl = 0;
 jobject JNI::_jobj_egl_display = 0;
 jobject JNI::_jobj_egl_surface = 0;
+jobject JNI::_jobj_bluetooth_serial = 0;
 int JNI::_egl_version = 0;
 
 Common::Archive *JNI::_asset_archive = 0;
@@ -118,6 +119,14 @@ jmethodID JNI::_MID_AudioTrack_pause = 0;
 jmethodID JNI::_MID_AudioTrack_play = 0;
 jmethodID JNI::_MID_AudioTrack_stop = 0;
 jmethodID JNI::_MID_AudioTrack_write = 0;
+
+jmethodID JNI::_MID_BluetoothSerial_connect = 0;
+jmethodID JNI::_MID_BluetoothSerial_close = 0;
+jmethodID JNI::_MID_BluetoothSerial_isConnected = 0;
+jmethodID JNI::_MID_BluetoothSerial_sendNote = 0;
+
+jmethodID JNI::_MID_requestBluetoothPermission = 0;
+jmethodID JNI::_MID_hasBluetoothPermission = 0;
 
 const JNINativeMethod JNI::_natives[] = {
 	{ "create", "(Landroid/content/res/AssetManager;"
@@ -785,6 +794,8 @@ void JNI::create(JNIEnv *env, jobject self, jobject asset_manager,
 	FIND_METHOD(, findSAFTree, "(Ljava/lang/String;)Lorg/scummvm/scummvm/SAFFSTree;");
 	FIND_METHOD(, exportBackup, "(Ljava/lang/String;)I");
 	FIND_METHOD(, importBackup, "(Ljava/lang/String;Ljava/lang/String;)I");
+	FIND_METHOD(, requestBluetoothPermission, "()Z");
+	FIND_METHOD(, hasBluetoothPermission, "()Z");
 
 	_jobj_egl = env->NewGlobalRef(egl);
 	_jobj_egl_display = env->NewGlobalRef(egl_display);
@@ -1184,6 +1195,119 @@ int JNI::importBackup(const Common::U32String &prompt, const Common::String &pat
 
 		// BackupManager.ERROR_INVALID_BACKUP
 		return -1;
+	}
+
+	return result;
+}
+
+// SpeakerEasy Bluetooth SPP support
+bool JNI::requestBluetoothPermission() {
+	JNIEnv *env = JNI::getEnv();
+	return env->CallBooleanMethod(_jobj, _MID_requestBluetoothPermission);
+}
+
+bool JNI::hasBluetoothPermission() {
+	JNIEnv *env = JNI::getEnv();
+	return env->CallBooleanMethod(_jobj, _MID_hasBluetoothPermission);
+}
+
+bool JNI::bluetoothConnect(const Common::String &deviceName) {
+	JNIEnv *env = JNI::getEnv();
+
+	// Create BluetoothSerial instance if needed
+	if (_jobj_bluetooth_serial == 0) {
+		jclass cls = env->FindClass("org/scummvm/scummvm/BluetoothSerial");
+		if (cls == 0) {
+			LOGE("BluetoothSerial class not found");
+			return false;
+		}
+
+		jmethodID constructor = env->GetMethodID(cls, "<init>", "()V");
+		if (constructor == 0) {
+			LOGE("BluetoothSerial constructor not found");
+			env->DeleteLocalRef(cls);
+			return false;
+		}
+
+		jobject obj = env->NewObject(cls, constructor);
+		if (obj == 0) {
+			LOGE("Failed to create BluetoothSerial instance");
+			env->DeleteLocalRef(cls);
+			return false;
+		}
+
+		_jobj_bluetooth_serial = env->NewGlobalRef(obj);
+		env->DeleteLocalRef(obj);
+
+		// Cache method IDs
+		_MID_BluetoothSerial_connect = env->GetMethodID(cls, "connect", "(Ljava/lang/String;)Z");
+		_MID_BluetoothSerial_close = env->GetMethodID(cls, "close", "()V");
+		_MID_BluetoothSerial_isConnected = env->GetMethodID(cls, "isConnected", "()Z");
+		_MID_BluetoothSerial_sendNote = env->GetMethodID(cls, "sendNote", "(II)Z");
+
+		env->DeleteLocalRef(cls);
+	}
+
+	jstring jDeviceName = env->NewStringUTF(deviceName.c_str());
+	bool result = env->CallBooleanMethod(_jobj_bluetooth_serial, _MID_BluetoothSerial_connect, jDeviceName);
+	env->DeleteLocalRef(jDeviceName);
+
+	if (env->ExceptionCheck()) {
+		LOGE("bluetoothConnect: error");
+		env->ExceptionDescribe();
+		env->ExceptionClear();
+		return false;
+	}
+
+	return result;
+}
+
+void JNI::bluetoothDisconnect() {
+	if (_jobj_bluetooth_serial == 0) {
+		return;
+	}
+
+	JNIEnv *env = JNI::getEnv();
+	env->CallVoidMethod(_jobj_bluetooth_serial, _MID_BluetoothSerial_close);
+
+	if (env->ExceptionCheck()) {
+		env->ExceptionDescribe();
+		env->ExceptionClear();
+	}
+
+	env->DeleteGlobalRef(_jobj_bluetooth_serial);
+	_jobj_bluetooth_serial = 0;
+}
+
+bool JNI::bluetoothIsConnected() {
+	if (_jobj_bluetooth_serial == 0) {
+		return false;
+	}
+
+	JNIEnv *env = JNI::getEnv();
+	bool result = env->CallBooleanMethod(_jobj_bluetooth_serial, _MID_BluetoothSerial_isConnected);
+
+	if (env->ExceptionCheck()) {
+		env->ExceptionDescribe();
+		env->ExceptionClear();
+		return false;
+	}
+
+	return result;
+}
+
+bool JNI::bluetoothSendNote(uint16 freq, uint16 dur) {
+	if (_jobj_bluetooth_serial == 0) {
+		return false;
+	}
+
+	JNIEnv *env = JNI::getEnv();
+	bool result = env->CallBooleanMethod(_jobj_bluetooth_serial, _MID_BluetoothSerial_sendNote, (jint)freq, (jint)dur);
+
+	if (env->ExceptionCheck()) {
+		env->ExceptionDescribe();
+		env->ExceptionClear();
+		return false;
 	}
 
 	return result;

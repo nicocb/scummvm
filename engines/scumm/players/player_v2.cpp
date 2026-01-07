@@ -71,6 +71,7 @@ Player_V2::Player_V2(ScummEngine *scumm, Audio::Mixer *mixer, bool pcjr)
 	setMusicVolume(255);
 
 	_speakerEasy = Audio::SpeakerEasy::create();
+	_lastSentFreq = 0xFFFF;  // Invalid value to force first send
 
 	_mixer->playStream(Audio::Mixer::kPlainSoundType, &_soundHandle, this, -1, Audio::Mixer::kMaxChannelVolume, 0, DisposeAfterUse::NO, true);
 }
@@ -272,19 +273,22 @@ void Player_V2::generateSpkSamples(int16 *data, uint len) {
 		squareGenerator(0, _channels[winning_channel].d.freq, 0,
 				0, data, len);
 
-		// Envoi au hardware externe
+		// Envoi au hardware externe (seulement si fréquence change)
 		if (_speakerEasy && _speakerEasy->isConnected()) {
-			// Conversion de la fréquence interne vers Hz
 			int freqDiv = _channels[winning_channel].d.freq >> 6;
 			if (freqDiv > 0) {
 				uint16 freq = 1193000 / freqDiv;
-				_speakerEasy->sendNote(freq);
+				if (freq != _lastSentFreq) {
+					_speakerEasy->sendNote(freq);
+					_lastSentFreq = freq;
+				}
 			}
 		}
 	} else {
-		// Silence sur le hardware externe
-		if (_speakerEasy && _speakerEasy->isConnected()) {
+		// Silence sur le hardware externe (seulement si pas déjà en silence)
+		if (_speakerEasy && _speakerEasy->isConnected() && _lastSentFreq != 0) {
 			_speakerEasy->sendNote(0);
+			_lastSentFreq = 0;
 		}
 		if (_level == 0)
 			/* shortcut: no sound is being played. */
