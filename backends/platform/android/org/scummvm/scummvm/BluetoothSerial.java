@@ -3,10 +3,13 @@ package org.scummvm.scummvm;
 import android.bluetooth.BluetoothAdapter;
 import android.bluetooth.BluetoothDevice;
 import android.bluetooth.BluetoothSocket;
+import android.os.ParcelFileDescriptor;
 import android.util.Log;
 
+import java.io.FileDescriptor;
 import java.io.IOException;
 import java.io.OutputStream;
+import java.lang.reflect.Field;
 import java.util.Set;
 import java.util.UUID;
 
@@ -53,7 +56,7 @@ public class BluetoothSerial {
         for (BluetoothDevice device : pairedDevices) {
             String name = device.getName();
             Log.d(LOG_TAG, "Found paired device: " + name);
-            if (name != null && name.contains(deviceName)) {
+            if (name != null && name.equalsIgnoreCase(deviceName)) {
                 targetDevice = device;
                 break;
             }
@@ -119,46 +122,87 @@ public class BluetoothSerial {
         }
     }
 
-    /**
-     * Send raw bytes to the Bluetooth device.
-     * @return number of bytes written, or -1 on error
-     */
-    public int write(byte[] data) {
-        if (!_connected || _outputStream == null) {
-            return -1;
-        }
-
-        try {
-            _outputStream.write(data);
-            return data.length;
-        } catch (IOException e) {
-            Log.e(LOG_TAG, "Write failed: " + e.getMessage());
-            return -1;
-        }
-    }
-
-    /**
-     * Send a SpeakerEasy note command.
-     * Protocol: CMD_STREAM_NOTE (0x06) + Freq(2) + Dur(2)
-     * @return true if send succeeded
-     */
-    public boolean sendNote(int freq, int duration) {
-        if (!_connected) {
-            return false;
-        }
-
-        byte[] packet = new byte[5];
-        packet[0] = 0x06;  // CMD_STREAM_NOTE
-        packet[1] = (byte) (freq & 0xFF);
-        packet[2] = (byte) ((freq >> 8) & 0xFF);
-        packet[3] = (byte) (duration & 0xFF);
-        packet[4] = (byte) ((duration >> 8) & 0xFF);
-
-        return write(packet) == 5;
-    }
-
     public boolean isConnected() {
         return _connected;
+    }
+
+    /**
+     * Get the native file descriptor for the Bluetooth socket.
+     * This allows native code to write directly without JNI calls.
+     * @return file descriptor number, or -1 if not connected
+     */
+    public int getSocketFd() {
+        if (!_connected || _socket == null) {
+            return -1;
+        }
+        try {
+            // Use reflection to get the underlying FileDescriptor
+            // BluetoothSocket has mSocket (LocalSocket) which has mFdHandle (ParcelFileDescriptor)
+            // or alternatively mSocket has getFileDescriptor() method
+            Field socketField = BluetoothSocket.class.getDeclaredField("mSocket");
+            socketField.setAccessible(true);
+            Object localSocket = socketField.get(_socket);
+            if (localSocket == null) {
+                Log.e(LOG_TAG, "mSocket is null");
+                return -1;
+            }
+
+            // Try to get FileDescriptor via getFileDescriptor() method first
+            try {
+                java.lang.reflect.Method getFdMethod = localSocket.getClass().getMethod("getFileDescriptor");
+                FileDescriptor fd = (FileDescriptor) getFdMethod.invoke(localSocket);
+                if (fd != null && fd.valid()) {
+                    Field descriptorField = FileDescriptor.class.getDeclaredField("descriptor");
+                    descriptorField.setAccessible(true);
+                    int fdInt = descriptorField.getInt(fd);
+                    Log.d(LOG_TAG, "Got fd via getFileDescriptor(): " + fdInt);
+                    return fdInt;
+                }
+            } catch (NoSuchMethodException e) {
+                Log.d(LOG_TAG, "getFileDescriptor() not available, trying fields");
+            }
+
+            // Try mFdHandle (ParcelFileDescriptor) field
+            try {
+                Field fdHandleField = localSocket.getClass().getDeclaredField("mFdHandle");
+                fdHandleField.setAccessible(true);
+                ParcelFileDescriptor pfd = (ParcelFileDescriptor) fdHandleField.get(localSocket);
+                if (pfd != null) {
+                    int fdInt = pfd.getFd();
+                    Log.d(LOG_TAG, "Got fd via mFdHandle: " + fdInt);
+                    return fdInt;
+                }
+            } catch (NoSuchFieldException e) {
+                Log.d(LOG_TAG, "mFdHandle not available, trying impl");
+            }
+
+            // Try mImpl.mFd path (older Android)
+            try {
+                Field implField = localSocket.getClass().getDeclaredField("impl");
+                implField.setAccessible(true);
+                Object impl = implField.get(localSocket);
+                if (impl != null) {
+                    Field fdField = impl.getClass().getDeclaredField("fd");
+                    fdField.setAccessible(true);
+                    FileDescriptor fd = (FileDescriptor) fdField.get(impl);
+                    if (fd != null && fd.valid()) {
+                        Field descriptorField = FileDescriptor.class.getDeclaredField("descriptor");
+                        descriptorField.setAccessible(true);
+                        int fdInt = descriptorField.getInt(fd);
+                        Log.d(LOG_TAG, "Got fd via impl.fd: " + fdInt);
+                        return fdInt;
+                    }
+                }
+            } catch (NoSuchFieldException e) {
+                Log.d(LOG_TAG, "impl.fd not available");
+            }
+
+            Log.e(LOG_TAG, "Could not find fd in LocalSocket");
+            return -1;
+        } catch (Exception e) {
+            Log.e(LOG_TAG, "Failed to get socket fd: " + e.getMessage());
+            return -1;
+        }
     }
 
     public void close() {

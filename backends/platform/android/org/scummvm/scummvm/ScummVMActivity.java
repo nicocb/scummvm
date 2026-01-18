@@ -975,6 +975,16 @@ public class ScummVMActivity extends Activity implements OnKeyboardVisibilityLis
 			}
 			return ret;
 		}
+
+		@Override
+		protected boolean requestBluetoothPermission() {
+			return ScummVMActivity.this.requestBluetoothPermission();
+		}
+
+		@Override
+		protected boolean hasBluetoothPermission() {
+			return ScummVMActivity.this.hasBluetoothPermission();
+		}
 	}
 
 	private MyScummVM _scummvm;
@@ -1328,14 +1338,19 @@ public class ScummVMActivity extends Activity implements OnKeyboardVisibilityLis
 	}
 
 	/**
-	 * Check and request Bluetooth Connect permission (required for Android 12+).
-	 * @return true if permission is already granted
+	 * Check and request Bluetooth permissions (required for Android 12+).
+	 * @return true if permissions are already granted
 	 */
 	public boolean requestBluetoothPermission() {
 		if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-			if (checkSelfPermission(Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED) {
-				Log.d(ScummVM.LOG_TAG, "Requesting BLUETOOTH_CONNECT permission");
-				requestPermissions(new String[]{Manifest.permission.BLUETOOTH_CONNECT}, MY_PERMISSIONS_REQUEST_BLUETOOTH);
+			boolean needConnect = checkSelfPermission(Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED;
+			boolean needScan = checkSelfPermission(Manifest.permission.BLUETOOTH_SCAN) != PackageManager.PERMISSION_GRANTED;
+			if (needConnect || needScan) {
+				Log.d(ScummVM.LOG_TAG, "Requesting Bluetooth permissions");
+				requestPermissions(new String[]{
+					Manifest.permission.BLUETOOTH_CONNECT,
+					Manifest.permission.BLUETOOTH_SCAN
+				}, MY_PERMISSIONS_REQUEST_BLUETOOTH);
 				return false;
 			}
 		}
@@ -1343,12 +1358,13 @@ public class ScummVMActivity extends Activity implements OnKeyboardVisibilityLis
 	}
 
 	/**
-	 * Check if Bluetooth Connect permission is granted.
-	 * @return true if permission is granted (or not needed on older Android versions)
+	 * Check if Bluetooth permissions are granted.
+	 * @return true if permissions are granted (or not needed on older Android versions)
 	 */
 	public boolean hasBluetoothPermission() {
 		if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-			return checkSelfPermission(Manifest.permission.BLUETOOTH_CONNECT) == PackageManager.PERMISSION_GRANTED;
+			return checkSelfPermission(Manifest.permission.BLUETOOTH_CONNECT) == PackageManager.PERMISSION_GRANTED
+				&& checkSelfPermission(Manifest.permission.BLUETOOTH_SCAN) == PackageManager.PERMISSION_GRANTED;
 		}
 		return true;
 	}

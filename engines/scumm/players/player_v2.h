@@ -71,7 +71,6 @@ protected:
 	Audio::SoundHandle _soundHandle;
 	const uint32 _sampleRate;
 	Audio::SpeakerEasy *_speakerEasy;
-	uint16 _lastSentFreq;  // Track last frequency sent to avoid duplicates
 
 	Common::Mutex _mutex;
 

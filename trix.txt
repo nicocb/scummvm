@@ -12,3 +12,7 @@ sed -i 's/\r$//' ./android_project/gradlew
 make androiddistdebug
 
 make clean;make androiddistdebug;
+
+
+
+//Themes 

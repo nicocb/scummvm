@@ -134,7 +134,7 @@ public:
 	static bool bluetoothConnect(const Common::String &deviceName);
 	static void bluetoothDisconnect();
 	static bool bluetoothIsConnected();
-	static bool bluetoothSendNote(uint16 freq, uint16 dur);
+	static int getBluetoothSocketFd() { return _bluetooth_socket_fd; }
 
 private:
 	static pthread_key_t _env_tls;
@@ -147,6 +147,7 @@ private:
 	static jobject _jobj_egl_display;
 	static jobject _jobj_egl_surface;
 	static jobject _jobj_bluetooth_serial;
+	static int _bluetooth_socket_fd;  // Native fd for direct writes (no JNI needed)
 	// cached EGL version
 	static int _egl_version;
 
@@ -194,7 +195,6 @@ private:
 	static jmethodID _MID_BluetoothSerial_connect;
 	static jmethodID _MID_BluetoothSerial_close;
 	static jmethodID _MID_BluetoothSerial_isConnected;
-	static jmethodID _MID_BluetoothSerial_sendNote;
 
 	static jmethodID _MID_requestBluetoothPermission;
 	static jmethodID _MID_hasBluetoothPermission;

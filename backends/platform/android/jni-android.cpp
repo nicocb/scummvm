@@ -65,6 +65,7 @@ jobject JNI::_jobj_egl = 0;
 jobject JNI::_jobj_egl_display = 0;
 jobject JNI::_jobj_egl_surface = 0;
 jobject JNI::_jobj_bluetooth_serial = 0;
+int JNI::_bluetooth_socket_fd = -1;
 int JNI::_egl_version = 0;
 
 Common::Archive *JNI::_asset_archive = 0;
@@ -123,7 +124,6 @@ jmethodID JNI::_MID_AudioTrack_write = 0;
 jmethodID JNI::_MID_BluetoothSerial_connect = 0;
 jmethodID JNI::_MID_BluetoothSerial_close = 0;
 jmethodID JNI::_MID_BluetoothSerial_isConnected = 0;
-jmethodID JNI::_MID_BluetoothSerial_sendNote = 0;
 
 jmethodID JNI::_MID_requestBluetoothPermission = 0;
 jmethodID JNI::_MID_hasBluetoothPermission = 0;
@@ -1212,6 +1212,7 @@ bool JNI::hasBluetoothPermission() {
 }
 
 bool JNI::bluetoothConnect(const Common::String &deviceName) {
+	LOGD("bluetoothConnect: called for device '%s', tid=%d", deviceName.c_str(), (int)pthread_self()); // DEBUG REMOVEME
 	JNIEnv *env = JNI::getEnv();
 
 	// Create BluetoothSerial instance if needed
@@ -1243,7 +1244,6 @@ bool JNI::bluetoothConnect(const Common::String &deviceName) {
 		_MID_BluetoothSerial_connect = env->GetMethodID(cls, "connect", "(Ljava/lang/String;)Z");
 		_MID_BluetoothSerial_close = env->GetMethodID(cls, "close", "()V");
 		_MID_BluetoothSerial_isConnected = env->GetMethodID(cls, "isConnected", "()Z");
-		_MID_BluetoothSerial_sendNote = env->GetMethodID(cls, "sendNote", "(II)Z");
 
 		env->DeleteLocalRef(cls);
 	}
@@ -1259,6 +1259,18 @@ bool JNI::bluetoothConnect(const Common::String &deviceName) {
 		return false;
 	}
 
+	// Get the native socket fd for direct writes (no JNI needed from audio thread)
+	if (result) {
+		jclass cls = env->GetObjectClass(_jobj_bluetooth_serial);
+		jmethodID getSocketFdMethod = env->GetMethodID(cls, "getSocketFd", "()I");
+		if (getSocketFdMethod) {
+			_bluetooth_socket_fd = env->CallIntMethod(_jobj_bluetooth_serial, getSocketFdMethod);
+			LOGD("bluetoothConnect: got socket fd=%d", _bluetooth_socket_fd); // DEBUG REMOVEME
+		}
+		env->DeleteLocalRef(cls);
+	}
+
+	LOGD("bluetoothConnect: result=%d, _jobj_bluetooth_serial=%p, fd=%d", result, _jobj_bluetooth_serial, _bluetooth_socket_fd); // DEBUG REMOVEME
 	return result;
 }
 
@@ -1266,6 +1278,8 @@ void JNI::bluetoothDisconnect() {
 	if (_jobj_bluetooth_serial == 0) {
 		return;
 	}
+
+	_bluetooth_socket_fd = -1;  // Clear fd first
 
 	JNIEnv *env = JNI::getEnv();
 	env->CallVoidMethod(_jobj_bluetooth_serial, _MID_BluetoothSerial_close);
@@ -1280,12 +1294,24 @@ void JNI::bluetoothDisconnect() {
 }
 
 bool JNI::bluetoothIsConnected() {
-	if (_jobj_bluetooth_serial == 0) {
+	LOGD("bluetoothIsConnected: called, _jobj_bluetooth_serial=%p, _vm=%p, tid=%d", _jobj_bluetooth_serial, _vm, (int)pthread_self()); // DEBUG REMOVEME
+
+	if (_jobj_bluetooth_serial == 0 || _vm == 0) {
+		LOGD("bluetoothIsConnected: early return (null ptr)"); // DEBUG REMOVEME
 		return false;
 	}
 
-	JNIEnv *env = JNI::getEnv();
+	// Get JNI env safely - may be called from engine thread
+	JNIEnv *env = nullptr;
+	jint res = _vm->GetEnv((void **)&env, JNI_VERSION_1_2);
+	LOGD("bluetoothIsConnected: GetEnv returned %d, env=%p", res, env); // DEBUG REMOVEME
+	if (res != JNI_OK || env == nullptr) {
+		LOGW("bluetoothIsConnected: GetEnv failed (%d), thread not attached?", res);
+		return false;
+	}
+
 	bool result = env->CallBooleanMethod(_jobj_bluetooth_serial, _MID_BluetoothSerial_isConnected);
+	LOGD("bluetoothIsConnected: CallBooleanMethod returned %d", result); // DEBUG REMOVEME
 
 	if (env->ExceptionCheck()) {
 		env->ExceptionDescribe();
@@ -1296,19 +1322,3 @@ bool JNI::bluetoothIsConnected() {
 	return result;
 }
 
-bool JNI::bluetoothSendNote(uint16 freq, uint16 dur) {
-	if (_jobj_bluetooth_serial == 0) {
-		return false;
-	}
-
-	JNIEnv *env = JNI::getEnv();
-	bool result = env->CallBooleanMethod(_jobj_bluetooth_serial, _MID_BluetoothSerial_sendNote, (jint)freq, (jint)dur);
-
-	if (env->ExceptionCheck()) {
-		env->ExceptionDescribe();
-		env->ExceptionClear();
-		return false;
-	}
-
-	return result;
-}

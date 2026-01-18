@@ -1923,7 +1923,8 @@ void OptionsDialog::addSpeakerEasyControls(GuiObject *boss, const Common::String
 
 	// Load current values
 	_speakerEasyCheckbox->setState(ConfMan.getBool("speakereasy_enable", _domain));
-	_speakerEasyPort->setEditString(ConfMan.get("speakereasy_port", _domain));
+	Common::String port = ConfMan.get("speakereasy_port", _domain);
+	_speakerEasyPort->setEditString(port.empty() ? "spkr-ez" : port);
 }
 
 // The function has an extra slider range parameter, since both the launcher and SCUMM engine

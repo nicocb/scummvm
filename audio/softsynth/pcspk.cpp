@@ -76,8 +76,8 @@ void PCSpeakerStream::play(PCSpeaker::WaveForm wave, int freq, int32 length) {
 	}
 	_mixedSamples = 0;
 
-	// Envoi au hardware externe
-	if (_speakerEasy && _speakerEasy->isConnected()) {
+	// Send to external hardware
+	if (_speakerEasy) {
 		_speakerEasy->sendNote(freq);
 	}
 }
@@ -89,8 +89,8 @@ void PCSpeakerStream::playQueue(PCSpeaker::WaveForm wave, float freq, uint32 len
 	// readBuffer method.
 	_commandQueue->push(Command(wave, freq, lengthus));
 
-	// Envoi au hardware externe
-	if (_speakerEasy && _speakerEasy->isConnected()) {
+	// Send to external hardware
+	if (_speakerEasy) {
 		_speakerEasy->sendNote((uint16)freq);
 	}
 }
@@ -107,8 +107,8 @@ void PCSpeakerStream::stop(int32 delay) {
 	}
 	_playForever = false;
 
-	// Silence sur le hardware externe
-	if (_speakerEasy && _speakerEasy->isConnected()) {
+	// Mute external hardware
+	if (_speakerEasy) {
 		_speakerEasy->sendNote(0);
 	}
 }

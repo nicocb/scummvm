@@ -64,12 +64,8 @@ MODULE_OBJS := \
 	softsynth/appleiigs.o \
 	softsynth/fluidsynth.o \
 	softsynth/eas.o \
-	softsynth/pcspk.o
-
-ifeq ($(BACKEND), android)
-MODULE_OBJS += \
+	softsynth/pcspk.o \
 	softsynth/speakereasy.o
-endif
 
 ifndef DISABLE_NUKED_OPL
 MODULE_OBJS += \
