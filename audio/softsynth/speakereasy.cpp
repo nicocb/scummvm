@@ -146,9 +146,6 @@ void SpeakerEasy::writePacket(uint16 freq, uint16 delta) {
     uint8 packet[5];
     buildPacket(packet, CMD_STREAM_NOTE_DELTA, freq, delta);
 
-    // DEBUG REMOVEME
-    __android_log_print(ANDROID_LOG_DEBUG, "SpeakerEasy", "writePacket freq=%u delta=%u", freq, delta);
-
     write(_fd, packet, 5);
 }
 
@@ -158,14 +155,15 @@ void SpeakerEasy::writePacket(uint16 freq, uint16 delta) {
 // ----------------------------------------------------------------------------
 // Windows Implementation - Serial port via Win32 API
 // ----------------------------------------------------------------------------
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#include <windows.h>
 
 namespace Audio {
 
 SpeakerEasy::SpeakerEasy(const char *portName) : _connected(false), _lastSentFreq(0), _accumulatedDelta(0), _hSerial(INVALID_HANDLE_VALUE) {
-    memset(&_overlapped, 0, sizeof(_overlapped));
-
-    // Open with FILE_FLAG_OVERLAPPED for async I/O
-    _hSerial = CreateFileA(portName, GENERIC_WRITE, 0, NULL, OPEN_EXISTING, FILE_FLAG_OVERLAPPED, NULL);
+    _hSerial = CreateFileA(portName, GENERIC_WRITE, 0, NULL, OPEN_EXISTING, 0, NULL);
 
     if (_hSerial == INVALID_HANDLE_VALUE) {
         warning("SpeakerEasy: CreateFileA failed for %s (error %lu)", portName, GetLastError());
@@ -176,9 +174,9 @@ SpeakerEasy::SpeakerEasy(const char *portName) : _connected(false), _lastSentFre
     memset(&dcbSerialParams, 0, sizeof(dcbSerialParams));
     dcbSerialParams.DCBlength = sizeof(dcbSerialParams);
 
-    if (!GetCommState(_hSerial, &dcbSerialParams)) {
+    if (!GetCommState((HANDLE)_hSerial, &dcbSerialParams)) {
         warning("SpeakerEasy: GetCommState failed (error %lu)", GetLastError());
-        CloseHandle(_hSerial);
+        CloseHandle((HANDLE)_hSerial);
         _hSerial = INVALID_HANDLE_VALUE;
         return;
     }
@@ -190,9 +188,9 @@ SpeakerEasy::SpeakerEasy(const char *portName) : _connected(false), _lastSentFre
     dcbSerialParams.fDtrControl = DTR_CONTROL_ENABLE;
     dcbSerialParams.fRtsControl = RTS_CONTROL_ENABLE;
 
-    if (!SetCommState(_hSerial, &dcbSerialParams)) {
+    if (!SetCommState((HANDLE)_hSerial, &dcbSerialParams)) {
         warning("SpeakerEasy: SetCommState failed (error %lu)", GetLastError());
-        CloseHandle(_hSerial);
+        CloseHandle((HANDLE)_hSerial);
         _hSerial = INVALID_HANDLE_VALUE;
         return;
     }
@@ -203,7 +201,7 @@ SpeakerEasy::SpeakerEasy(const char *portName) : _connected(false), _lastSentFre
 SpeakerEasy::~SpeakerEasy() {
     if (_connected) {
         sendNote(0);
-        CloseHandle(_hSerial);
+        CloseHandle((HANDLE)_hSerial);
     }
 }
 
@@ -215,11 +213,8 @@ void SpeakerEasy::writePacket(uint16 freq, uint16 delta) {
     uint8 packet[5];
     buildPacket(packet, CMD_STREAM_NOTE_DELTA, freq, delta);
 
-    // DEBUG REMOVEME
-    debug(1, "SpeakerEasy: writePacket freq=%u delta=%u time=%lu", freq, delta, GetTickCount());
-
-    // Fire & forget async write
-    WriteFile(_hSerial, packet, 5, NULL, &_overlapped);
+    DWORD bytesWritten;
+    WriteFile((HANDLE)_hSerial, packet, 5, &bytesWritten, NULL);
 }
 
 } // End of namespace Audio
@@ -276,9 +271,6 @@ bool SpeakerEasy::isConnected() const {
 void SpeakerEasy::writePacket(uint16 freq, uint16 dur) {
     uint8 packet[5];
     buildPacket(packet, CMD_STREAM_NOTE, freq, dur);
-
-    // DEBUG REMOVEME
-    debug(1, "SpeakerEasy: writePacket freq=%u dur=%u", freq, dur);
 
     write(_fd, packet, 5);
 }

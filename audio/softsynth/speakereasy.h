@@ -3,14 +3,6 @@
 
 #include "common/scummsys.h"
 
-// Platform-specific headers for member variables
-#if defined(WIN32) || defined(_WIN32)
-#ifndef WIN32_LEAN_AND_MEAN
-#define WIN32_LEAN_AND_MEAN
-#endif
-#include <windows.h>
-#endif
-
 namespace Audio {
 
 /**
@@ -40,8 +32,7 @@ private:
     uint16 _lastSentFreq;
     uint32 _accumulatedDelta;  // Accumulated time in ms since last sent note
 #if defined(WIN32) || defined(_WIN32)
-    HANDLE _hSerial;
-    OVERLAPPED _overlapped;
+    void *_hSerial;      // HANDLE (avoid including windows.h in header)
 #elif defined(__ANDROID__) || defined(__POSIX__) || defined(__linux__) || defined(__APPLE__)
     int _fd;
 #endif

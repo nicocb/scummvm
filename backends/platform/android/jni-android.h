@@ -133,7 +133,6 @@ public:
 	static bool hasBluetoothPermission();
 	static bool bluetoothConnect(const Common::String &deviceName);
 	static void bluetoothDisconnect();
-	static bool bluetoothIsConnected();
 	static int getBluetoothSocketFd() { return _bluetooth_socket_fd; }
 
 private:

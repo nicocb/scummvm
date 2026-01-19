@@ -1212,7 +1212,6 @@ bool JNI::hasBluetoothPermission() {
 }
 
 bool JNI::bluetoothConnect(const Common::String &deviceName) {
-	LOGD("bluetoothConnect: called for device '%s', tid=%d", deviceName.c_str(), (int)pthread_self()); // DEBUG REMOVEME
 	JNIEnv *env = JNI::getEnv();
 
 	// Create BluetoothSerial instance if needed
@@ -1265,12 +1264,10 @@ bool JNI::bluetoothConnect(const Common::String &deviceName) {
 		jmethodID getSocketFdMethod = env->GetMethodID(cls, "getSocketFd", "()I");
 		if (getSocketFdMethod) {
 			_bluetooth_socket_fd = env->CallIntMethod(_jobj_bluetooth_serial, getSocketFdMethod);
-			LOGD("bluetoothConnect: got socket fd=%d", _bluetooth_socket_fd); // DEBUG REMOVEME
 		}
 		env->DeleteLocalRef(cls);
 	}
 
-	LOGD("bluetoothConnect: result=%d, _jobj_bluetooth_serial=%p, fd=%d", result, _jobj_bluetooth_serial, _bluetooth_socket_fd); // DEBUG REMOVEME
 	return result;
 }
 
@@ -1291,34 +1288,5 @@ void JNI::bluetoothDisconnect() {
 
 	env->DeleteGlobalRef(_jobj_bluetooth_serial);
 	_jobj_bluetooth_serial = 0;
-}
-
-bool JNI::bluetoothIsConnected() {
-	LOGD("bluetoothIsConnected: called, _jobj_bluetooth_serial=%p, _vm=%p, tid=%d", _jobj_bluetooth_serial, _vm, (int)pthread_self()); // DEBUG REMOVEME
-
-	if (_jobj_bluetooth_serial == 0 || _vm == 0) {
-		LOGD("bluetoothIsConnected: early return (null ptr)"); // DEBUG REMOVEME
-		return false;
-	}
-
-	// Get JNI env safely - may be called from engine thread
-	JNIEnv *env = nullptr;
-	jint res = _vm->GetEnv((void **)&env, JNI_VERSION_1_2);
-	LOGD("bluetoothIsConnected: GetEnv returned %d, env=%p", res, env); // DEBUG REMOVEME
-	if (res != JNI_OK || env == nullptr) {
-		LOGW("bluetoothIsConnected: GetEnv failed (%d), thread not attached?", res);
-		return false;
-	}
-
-	bool result = env->CallBooleanMethod(_jobj_bluetooth_serial, _MID_BluetoothSerial_isConnected);
-	LOGD("bluetoothIsConnected: CallBooleanMethod returned %d", result); // DEBUG REMOVEME
-
-	if (env->ExceptionCheck()) {
-		env->ExceptionDescribe();
-		env->ExceptionClear();
-		return false;
-	}
-
-	return result;
 }
 
