@@ -21,6 +21,7 @@
 
 #include "scumm/players/player_v2.h"
 #include "scumm/scumm.h"
+#include "audio/softsynth/speakereasy.h"
 
 #define FREQ_HZ 236 // Don't change!
 

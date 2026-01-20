@@ -20,6 +20,7 @@
  */
 
 #include "audio/softsynth/pcspk.h"
+#include "audio/softsynth/speakereasy.h"
 #include "audio/null.h"
 
 #include "common/queue.h"

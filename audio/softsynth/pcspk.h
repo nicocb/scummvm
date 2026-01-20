@@ -24,11 +24,12 @@
 
 #include "audio/audiostream.h"
 #include "audio/mixer.h"
-#include "audio/softsynth/speakereasy.h"
 #include "common/mutex.h"
 #include "common/queue.h"
 
 namespace Audio {
+
+class SpeakerEasy;
 
 class PCSpeakerStream;
 

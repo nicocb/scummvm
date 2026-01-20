@@ -25,7 +25,10 @@
 #include "scumm/players/player_v2base.h"
 #include "audio/audiostream.h"
 #include "audio/mixer.h"
-#include "audio/softsynth/speakereasy.h"
+
+namespace Audio {
+class SpeakerEasy;
+}
 
 namespace Scumm {
 
