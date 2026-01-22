@@ -2,6 +2,7 @@
 #define AUDIO_SPEAKEASY_H
 
 #include "common/scummsys.h"
+#include "common/str.h"
 
 namespace Audio {
 
@@ -15,7 +16,7 @@ class SpeakerEasy {
 public:
     SpeakerEasy(const char *portName);
     ~SpeakerEasy();
-    bool isConnected() const;
+    bool isConnected();
     void sendNote(uint16 freq, uint16 delta = 0);
 
     /**
@@ -27,10 +28,14 @@ public:
 
 private:
     void writePacket(uint16 freq, uint16 dur);  // Actually send to hardware
-
+    void connect();  // connect to hardware
+    void handleDisconnect();  // connect to hardware
     bool _connected;
+    Common::String _portName;
+
     uint16 _lastSentFreq;
-    uint32 _accumulatedDelta;  // Accumulated time in ms since last sent note
+    uint16 _accumulatedDelta;  // Accumulated time in ms since last sent note
+    uint32 _lastConnectionAttempt;
 #if defined(WIN32) || defined(_WIN32)
     void *_hSerial;      // HANDLE (avoid including windows.h in header)
 #elif defined(__ANDROID__) || defined(__POSIX__) || defined(__linux__) || defined(__APPLE__)

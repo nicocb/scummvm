@@ -47,8 +47,11 @@ static void buildPacket(uint8 *packet, uint8 cmd, uint16 freq, uint16 param) {
     packet[4] = (uint8)((param >> 8) & 0xFF);
 }
 
+
 void SpeakerEasy::sendNote(uint16 freq, uint16 delta) {
-    if (!_connected) return;
+    if (!isConnected()) {
+        return;
+    }
 
     // Accumulate delta time
     _accumulatedDelta += delta;
@@ -57,13 +60,11 @@ void SpeakerEasy::sendNote(uint16 freq, uint16 delta) {
     // This also handles freq == _lastSentFreq since diff=0 is within range
     int16 freqDiff = (int16)freq - (int16)_lastSentFreq;
     if (freqDiff > -MIN_FREQ_CHANGE && freqDiff < MIN_FREQ_CHANGE) {
-        debug(1, "SpeakerEasy: DROP (small change) freq=%u lastFreq=%u diff=%d",
-            freq, _lastSentFreq, freqDiff);
         return;
     }
 
     // Frequency changed significantly (or to/from silence) - send with accumulated delta
-    writePacket(freq, (uint16)(_accumulatedDelta > 65535 ? 65535 : _accumulatedDelta));
+    writePacket(freq, _accumulatedDelta );
     _lastSentFreq = freq;
     _accumulatedDelta = 0;
 }
@@ -86,6 +87,19 @@ SpeakerEasy *SpeakerEasy::create() {
     return se;
 }
 
+bool SpeakerEasy::isConnected() {
+    if(!_connected) {
+        uint32 current = g_system->getMillis();
+        if(current - _lastConnectionAttempt > 5000) {
+            debug(1, "SpeakerEasy: Attempting to reconnect...");
+            _lastConnectionAttempt = current;
+            // Try to reconnect
+            connect();
+        }
+    }
+    return _connected;
+}
+
 } // End of namespace Audio
 
 // ============================================================================
@@ -105,12 +119,17 @@ SpeakerEasy *SpeakerEasy::create() {
 
 namespace Audio {
 
-SpeakerEasy::SpeakerEasy(const char *portName) : _connected(false), _lastSentFreq(0), _accumulatedDelta(0), _fd(-1) {
+SpeakerEasy::SpeakerEasy(const char *portName) : _connected(false), _lastSentFreq(0), _accumulatedDelta(0), _lastConnectionAttempt(0), _fd(-1) {
+    _portName = portName;
+    connect();
+}
+
+void SpeakerEasy::connect() {
     if (!JNI::hasBluetoothPermission()) {
         JNI::requestBluetoothPermission();
         return;
     }
-    _connected = JNI::bluetoothConnect(portName);
+    _connected = JNI::bluetoothConnect(_portName);
     if (_connected) {
         _fd = JNI::getBluetoothSocketFd();
         if (_fd >= 0) {
@@ -131,6 +150,11 @@ SpeakerEasy::SpeakerEasy(const char *portName) : _connected(false), _lastSentFre
     }
 }
 
+void SpeakerEasy::handleDisconnect() {
+    _connected = false;
+    JNI::bluetoothDisconnect();
+}
+
 SpeakerEasy::~SpeakerEasy() {
     if (_connected) {
         sendNote(0);
@@ -138,9 +162,7 @@ SpeakerEasy::~SpeakerEasy() {
     }
 }
 
-bool SpeakerEasy::isConnected() const {
-    return _connected;
-}
+
 
 void SpeakerEasy::writePacket(uint16 freq, uint16 delta) {
     uint8 packet[5];
@@ -151,7 +173,7 @@ void SpeakerEasy::writePacket(uint16 freq, uint16 delta) {
 
 } // End of namespace Audio
 
-#elif defined(WIN32) || defined(_WIN32)
+#elif defined(WIN32)
 // ----------------------------------------------------------------------------
 // Windows Implementation - Serial port via Win32 API
 // ----------------------------------------------------------------------------
@@ -162,11 +184,16 @@ void SpeakerEasy::writePacket(uint16 freq, uint16 delta) {
 
 namespace Audio {
 
-SpeakerEasy::SpeakerEasy(const char *portName) : _connected(false), _lastSentFreq(0), _accumulatedDelta(0), _hSerial(INVALID_HANDLE_VALUE) {
-    _hSerial = CreateFileA(portName, GENERIC_WRITE, 0, NULL, OPEN_EXISTING, 0, NULL);
+SpeakerEasy::SpeakerEasy(const char *portName) : _connected(false), _lastSentFreq(0), _accumulatedDelta(0), _lastConnectionAttempt(0), _hSerial(INVALID_HANDLE_VALUE) {
+    _portName = portName;
+    connect();
+}
+
+void SpeakerEasy::connect() {
+    _hSerial = CreateFileA(_portName.c_str(), GENERIC_WRITE, 0, NULL, OPEN_EXISTING, 0, NULL);
 
     if (_hSerial == INVALID_HANDLE_VALUE) {
-        warning("SpeakerEasy: CreateFileA failed for %s (error %lu)", portName, GetLastError());
+        warning("SpeakerEasy: CreateFileA failed for %s (error %lu)", _portName.c_str(), GetLastError());
         return;
     }
 
@@ -198,15 +225,16 @@ SpeakerEasy::SpeakerEasy(const char *portName) : _connected(false), _lastSentFre
     _connected = true;
 }
 
+void SpeakerEasy::handleDisconnect() {
+    _connected = false;
+    CloseHandle((HANDLE)_hSerial);
+}
+
 SpeakerEasy::~SpeakerEasy() {
     if (_connected) {
         sendNote(0);
         CloseHandle((HANDLE)_hSerial);
     }
-}
-
-bool SpeakerEasy::isConnected() const {
-    return _connected;
 }
 
 void SpeakerEasy::writePacket(uint16 freq, uint16 delta) {
@@ -230,8 +258,14 @@ void SpeakerEasy::writePacket(uint16 freq, uint16 delta) {
 
 namespace Audio {
 
-SpeakerEasy::SpeakerEasy(const char *portName) : _connected(false), _lastSentFreq(0), _accumulatedDelta(0), _fd(-1) {
-    _fd = open(portName, O_WRONLY | O_NOCTTY | O_NDELAY);
+SpeakerEasy::SpeakerEasy(const char *portName) : _connected(false), _lastSentFreq(0), _accumulatedDelta(0), _lastConnectionAttempt(0), _fd(-1) {
+    _portName = portName;
+    connect();
+}
+
+void SpeakerEasy::connect() {
+    warning("SpeakerEasy: connecting to %s", _portName.c_str());
+    _fd = open(_portName.c_str(), O_WRONLY | O_NOCTTY);
     if (_fd >= 0) {
         struct termios tty;
         memset(&tty, 0, sizeof(tty));
@@ -239,6 +273,8 @@ SpeakerEasy::SpeakerEasy(const char *portName) : _connected(false), _lastSentFre
         if (tcgetattr(_fd, &tty) == 0) {
             cfsetospeed(&tty, B115200);
             cfsetispeed(&tty, B115200);
+
+            tty.c_iflag &= ~(IGNBRK | BRKINT | PARMRK | ISTRIP | INLCR | IGNCR | ICRNL);
 
             tty.c_cflag = (tty.c_cflag & ~CSIZE) | CS8;
             tty.c_cflag &= ~(PARENB | PARODD);
@@ -252,9 +288,24 @@ SpeakerEasy::SpeakerEasy(const char *portName) : _connected(false), _lastSentFre
 
             if (tcsetattr(_fd, TCSANOW, &tty) == 0) {
                 _connected = true;
+                debug(1, "SpeakerEasy: Successfully opened %s", _portName.c_str());
+            } else {
+                debug(1, "SpeakerEasy: tcsetattr failed for %s (errno %d)", _portName.c_str(), errno);
+                close(_fd);
             }
+        } else {
+            debug(1, "SpeakerEasy: tcgetattr failed for %s (errno %d)", _portName.c_str(), errno);
+            close(_fd);
         }
+    } else {
+        debug(1, "SpeakerEasy: open failed for %s (errno %d)", _portName.c_str(), errno);
     }
+    _lastConnectionAttempt = g_system->getMillis();
+}
+
+void SpeakerEasy::handleDisconnect() {
+    _connected = false;
+    close(_fd);
 }
 
 SpeakerEasy::~SpeakerEasy() {
@@ -264,15 +315,20 @@ SpeakerEasy::~SpeakerEasy() {
     }
 }
 
-bool SpeakerEasy::isConnected() const {
-    return _connected;
-}
 
 void SpeakerEasy::writePacket(uint16 freq, uint16 dur) {
     uint8 packet[5];
     buildPacket(packet, CMD_STREAM_NOTE, freq, dur);
 
-    write(_fd, packet, 5);
+    ssize_t written = write(_fd, packet, 5);
+    
+    if (written < 5) {
+        warning("Error writing packets : wrote %zd of 5 bytes (errno %d)", written, errno);
+        if (written < 0) {
+            warning("Device disconnected");
+            handleDisconnect();
+        }
+    }
 }
 
 } // End of namespace Audio
@@ -284,15 +340,11 @@ void SpeakerEasy::writePacket(uint16 freq, uint16 dur) {
 
 namespace Audio {
 
-SpeakerEasy::SpeakerEasy(const char *portName) : _connected(false), _lastSentFreq(0), _accumulatedDelta(0) {
+SpeakerEasy::SpeakerEasy(const char *portName) : _connected(false), _lastSentFreq(0), _accumulatedDelta(0), _lastConnectionAttempt(0) {
     warning("SpeakerEasy: Not supported on this platform");
 }
 
 SpeakerEasy::~SpeakerEasy() {
-}
-
-bool SpeakerEasy::isConnected() const {
-    return false;
 }
 
 void SpeakerEasy::writePacket(uint16 freq, uint16 dur) {
