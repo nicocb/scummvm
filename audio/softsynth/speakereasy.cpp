@@ -37,6 +37,7 @@ static const uint8 CMD_STREAM_NOTE_DELTA = 0x07;  // param = delta ms since last
 
 // Throttling constants
 static const uint16 MIN_FREQ_CHANGE = 5;  // Ignore freq changes < 5 Hz
+static const uint16 MAX_DELTA = 2000;       // Max delta before forcing a packet (limits glitch duration if packet lost)
 
 // Build a 5-byte packet
 static void buildPacket(uint8 *packet, uint8 cmd, uint16 freq, uint16 param) {
@@ -60,11 +61,15 @@ void SpeakerEasy::sendNote(uint16 freq, uint16 delta) {
     // This also handles freq == _lastSentFreq since diff=0 is within range
     int16 freqDiff = (int16)freq - (int16)_lastSentFreq;
     if (freqDiff > -MIN_FREQ_CHANGE && freqDiff < MIN_FREQ_CHANGE) {
-        return;
+        // Even if freq hasn't changed much, send a packet if delta is too large
+        // This limits glitch duration if a packet is lost over Bluetooth
+        if (_accumulatedDelta < MAX_DELTA) {
+            return;
+        }
     }
 
     // Frequency changed significantly (or to/from silence) - send with accumulated delta
-    writePacket(freq, _accumulatedDelta );
+    writePacket(freq, _accumulatedDelta);
     _lastSentFreq = freq;
     _accumulatedDelta = 0;
 }
@@ -132,21 +137,6 @@ void SpeakerEasy::connect() {
     _connected = JNI::bluetoothConnect(_portName);
     if (_connected) {
         _fd = JNI::getBluetoothSocketFd();
-        if (_fd >= 0) {
-            // Set socket to non-blocking
-            int flags = fcntl(_fd, F_GETFL, 0);
-            if (flags >= 0) {
-                fcntl(_fd, F_SETFL, flags | O_NONBLOCK);
-            }
-
-            // Minimize send buffer to reduce latency
-            int sndbuf = 5;
-            if (setsockopt(_fd, SOL_SOCKET, SO_SNDBUF, &sndbuf, sizeof(sndbuf)) < 0) {
-                __android_log_print(ANDROID_LOG_WARN, "SpeakerEasy", "setsockopt SO_SNDBUF failed: %s", strerror(errno));
-            } else {
-                __android_log_print(ANDROID_LOG_DEBUG, "SpeakerEasy", "Set SO_SNDBUF to %d", sndbuf);
-            }
-        }
     }
 }
 
@@ -168,7 +158,11 @@ void SpeakerEasy::writePacket(uint16 freq, uint16 delta) {
     uint8 packet[5];
     buildPacket(packet, CMD_STREAM_NOTE_DELTA, freq, delta);
 
-    write(_fd, packet, 5);
+    ssize_t written = write(_fd, packet, 5);
+    if (written != 5) {
+        warning("SpeakerEasy: write returned %zd (errno %d)", written, errno);
+        handleDisconnect();
+    }
 }
 
 } // End of namespace Audio
@@ -222,12 +216,27 @@ void SpeakerEasy::connect() {
         return;
     }
 
+    // Set timeouts to prevent blocking on write
+    COMMTIMEOUTS timeouts;
+    timeouts.ReadIntervalTimeout = 0;
+    timeouts.ReadTotalTimeoutMultiplier = 0;
+    timeouts.ReadTotalTimeoutConstant = 0;
+    timeouts.WriteTotalTimeoutMultiplier = 1;
+    timeouts.WriteTotalTimeoutConstant = 100;  // 100ms max write timeout
+
+    if (!SetCommTimeouts((HANDLE)_hSerial, &timeouts)) {
+        warning("SpeakerEasy: SetCommTimeouts failed (error %lu)", GetLastError());
+    }
+
     _connected = true;
 }
 
 void SpeakerEasy::handleDisconnect() {
     _connected = false;
-    CloseHandle((HANDLE)_hSerial);
+    if (_hSerial != INVALID_HANDLE_VALUE) {
+        CloseHandle((HANDLE)_hSerial);
+        _hSerial = INVALID_HANDLE_VALUE;
+    }
 }
 
 SpeakerEasy::~SpeakerEasy() {
@@ -242,7 +251,11 @@ void SpeakerEasy::writePacket(uint16 freq, uint16 delta) {
     buildPacket(packet, CMD_STREAM_NOTE_DELTA, freq, delta);
 
     DWORD bytesWritten;
-    WriteFile((HANDLE)_hSerial, packet, 5, &bytesWritten, NULL);
+    if (!WriteFile((HANDLE)_hSerial, packet, 5, &bytesWritten, NULL) || bytesWritten < 5) {
+        DWORD err = GetLastError();
+        warning("SpeakerEasy: WriteFile failed (error %lu, wrote %lu bytes)", err, bytesWritten);
+        handleDisconnect();
+    }
 }
 
 } // End of namespace Audio
